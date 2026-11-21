@@ -1,335 +1,264 @@
-/* ================= БАЗА ================= */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent; /* 📱 убирает синюю вспышку при тапе */
+/* =========================================================
+   1. ЗВЁЗДЫ
+   ========================================================= */
+const starsEl = document.getElementById('stars');
+
+// 📱 МОБИЛЬНАЯ ПРАВКА: меньше звёзд на телефоне (экономия ресурсов)
+const STAR_COUNT = window.innerWidth < 600 ? 70 : 120;
+
+for (let i = 0; i < STAR_COUNT; i++) {
+  const s = document.createElement('div');
+  s.className = 'star';
+
+  const size = Math.random() * 2.5 + 0.5;
+  s.style.width = size + 'px';
+  s.style.height = size + 'px';
+  s.style.left = Math.random() * 100 + '%';
+  s.style.top = Math.random() * 100 + '%';
+  s.style.animationDelay = Math.random() * 3 + 's';
+  s.style.animationDuration = (Math.random() * 2 + 2) + 's';
+
+  starsEl.appendChild(s);
 }
 
-html, body {
-  height: 100%;
-  overflow: hidden;
-  font-family: 'Georgia', serif;
+/* =========================================================
+   2. КАНВАС
+   ========================================================= */
+const canvas = document.getElementById('confetti-canvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(ellipse at center, #1a1a3e 0%, #0d0d1a 60%, #000 100%);
-  position: relative;
+resize();
+window.addEventListener('resize', resize);
 
-  /* 📱 МОБИЛЬНАЯ ПРАВКА: используем dvh вместо vh — учитывает адресную строку */
-  min-height: 100vh;
-  min-height: 100dvh;
+// 📱 МОБИЛЬНАЯ ПРАВКА: при повороте экрана — пересчитать + сместить «Нет» обратно,
+// если она уже «убежала» за пределы новых размеров
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    resize();
+    if (noBtn.classList.contains('runaway')) {
+      clampNoButtonToScreen();
+    }
+  }, 300);
+});
 
-  /* 📱 защита от горизонтального скролла */
-  overflow-x: hidden;
+/* =========================================================
+   3. КОНФЕТИ
+   ========================================================= */
+const COLORS = [
+  '#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff',
+  '#ff8e53', '#c78bff', '#ff4d9d', '#00e5ff'
+];
 
-  /* 📱 отключаем выделение текста при долгом тапе */
-  -webkit-user-select: none;
-  user-select: none;
-}
+const particles = [];
 
-/* ================= ЗВЁЗДЫ ================= */
-.stars {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
+// 📱 МОБИЛЬНАЯ ПРАВКА: ограничение числа частиц — на телефоне меньше = плавнее
+const MAX_PARTICLES = window.innerWidth < 600 ? 500 : 1200;
 
-.star {
-  position: absolute;
-  background: white;
-  border-radius: 50%;
-  animation: twinkle 3s infinite ease-in-out;
-}
+class Particle {
+  constructor(x, y, vx, vy, color) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.color = color;
+    this.size = Math.random() * 6 + 3;
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - 0.5) * 0.3;
+    this.shape = Math.random() < 0.5 ? 'rect' : 'circle';
+    this.gravity = 0.12;
+    this.drag = 0.99;
+    this.opacity = 1;
+    this.fadeDelay = Math.random() * 40 + 40;
+    this.age = 0;
+  }
 
-[club66008961|@keyframes] twinkle {
-  0%, 100% { opacity: 0.2; }
-  50%      { opacity: 1; }
-}
+  update() {
+    this.vx *= this.drag;
+    this.vy *= this.drag;
+    this.vy += this.gravity;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.rotation += this.rotSpeed;
+    this.age++;
+    if (this.age > this.fadeDelay) this.opacity -= 0.012;
+    return this.opacity > 0 && this.y < H + 50;
+  }
 
-/* ================= СВЕЧЕНИЕ ================= */
-.glow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 600px;
-  height: 600px;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(255, 180, 80, 0.15) 0%, transparent 70%);
-  animation: pulse 4s infinite ease-in-out;
-  pointer-events: none;
-}
-
-[club66008961|@keyframes] pulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); }
-  50%      { transform: translate(-50%, -50%) scale(1.3); }
-}
-
-/* ================= КАНВАС ================= */
-#confetti-canvas {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 20;
-}
-
-/* ================= ЭКРАНЫ ================= */
-.screen {
-  position: relative;
-  z-index: 10;
-  text-align: center;
-  padding: 20px;
-  transition: opacity 0.8s ease, transform 0.8s ease;
-
-  /* 📱 МОБИЛЬНАЯ ПРАВКА: не даём экрану вылезти за пределы viewport */
-  width: 100%;
-  max-width: 100vw;
-
-  /* 📱 учёт «безопасных зон» (чёлка, скругления) */
-  padding-left: max(20px, env(safe-area-inset-left));
-  padding-right: max(20px, env(safe-area-inset-right));
-  padding-bottom: max(20px, env(safe-area-inset-bottom));
-}
-
-.screen.hidden {
-  opacity: 0;
-  transform: translateY(30px) scale(0.95);
-  pointer-events: none;
-  position: absolute;
-}
-
-/* ================= ЭКРАН 1: ФОТО + ВОПРОС ================= */
-.photo-wrap {
-  margin-bottom: 24px;
-  animation: fadeUp 1.2s ease-out both;
-}
-
-.photo {
-  /* 📱 МОБИЛЬНАЯ ПРАВКА: уменьшены минимальные размеры, чтобы влезало на маленьких экранах */
-  width: clamp(140px, 32vw, 260px);
-  height: clamp(140px, 32vw, 260px);
-  object-fit: cover;
-  border-radius: 50%;
-  border: 4px solid rgba(255, 227, 163, 0.7);
-  box-shadow:
-    0 0 30px rgba(255, 200, 100, 0.45),
-    0 0 60px rgba(255, 150, 80, 0.25);
-  animation: photoGlow 3s ease-in-out infinite;
-  display: block;
-  margin: 0 auto;
-}
-
-[club66008961|@keyframes] photoGlow {
-  0%, 100% { box-shadow: 0 0 30px rgba(255, 200, 100, 0.45), 0 0 60px rgba(255, 150, 80, 0.25); }
-  50%      { box-shadow: 0 0 45px rgba(255, 220, 130, 0.75), 0 0 90px rgba(255, 150, 80, 0.45); }
-}
-
-.question-text {
-  font-size: clamp(1.6rem, 6vw, 3rem);
-  color: #ffe3a3;
-  margin-bottom: 40px;
-  letter-spacing: 1px;
-  animation: fadeUp 1.2s ease-out 0.2s both;
-  /* 📱 длинное слово не вылезет за экран */
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
-.buttons {
-  display: flex;
-  gap: 24px;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.btn-yes,
-.btn-no {
-  border: none;
-  font-size: 1.3rem;
-  font-family: inherit;
-  letter-spacing: 2px;
-  border-radius: 50px;
-  cursor: pointer;
-  padding: 18px 60px;
-  transition: transform 0.2s, box-shadow 0.2s, left 0.25s ease, top 0.25s ease;
-
-  /* 📱 критично для тача: увеличиваем зону нажатия и отключаем задержку */
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-
-  /* 📱 кнопка не должна расти при двойном тапе */
-  min-width: 120px;
-}
-
-/* Да */
-.btn-yes {
-  background: linear-gradient(135deg, #ff6b6b, #ff8e53);
-  color: white;box-shadow: 0 0 25px rgba(255, 107, 107, 0.6);
-  animation: fadeUp 1.2s ease-out 0.4s both;
-}
-
-/* 📱 МОБИЛЬНАЯ ПРАВКА: hover только на устройствах с мышью */
-[id705766|hover: hover] {
-  .btn-yes:hover {
-    transform: scale(1.08);
-    box-shadow: 0 0 45px rgba(255, 107, 107, 0.95);
+  draw() {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.opacity);
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    ctx.fillStyle = this.color;
+    if (this.shape === 'rect') {
+      ctx.fillRect(-this.size / 2, -this.size / 4, this.size, this.size / 2);
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 }
 
-.btn-yes:active {
-  transform: scale(0.95);
-}
+function burst(x, y, count = 80, force = 9) {
+  // 📱 не даём превысить лимит частиц
+  if (particles.length > MAX_PARTICLES) return;
 
-/* Нет */
-.btn-no {
-  background: rgba(255, 255, 255, 0.08);
-  color: #cfcfdf;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  animation: fadeUp 1.2s ease-out 0.6s both;
-  position: relative;
-}
-
-.btn-no.runaway {
-  position: fixed;
-  z-index: 30;
-}
-
-/* ================= ЭКРАН 2 ================= */
-.screen--greeting h1 {
-  font-size: clamp(2rem, 8vw, 5rem);
-  background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff, #ff6b6b);
-  background-size: 300% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shine 5s linear infinite;
-  margin-bottom: 10px;
-  letter-spacing: 2px;
-  filter: drop-shadow(0 0 25px rgba(255, 200, 100, 0.4));
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
-.screen--greeting h2 {
-  font-size: clamp(1.2rem, 4vw, 2rem);
-  color: #ffe3a3;
-  margin-bottom: 30px;
-  font-weight: 400;
-  letter-spacing: 1px;
-}
-
-.screen--greeting .message {
-  max-width: 600px;
-  margin: 0 auto 40px;
-  color: #d0d0e0;
-  font-size: clamp(1rem, 2.5vw, 1.2rem);
-  line-height: 1.7;
-  font-style: italic;
-}
-
-.btn-again {
-  background: transparent;
-  border: 2px solid rgba(255, 227, 163, 0.6);
-  color: #ffe3a3;
-  padding: 12px 32px;
-  font-size: 1rem;
-  border-radius: 50px;
-  cursor: pointer;
-  font-family: inherit;
-  letter-spacing: 1px;
-  transition: background 0.2s, transform 0.2s;
-  touch-action: manipulation;
-}
-
-[id705766|hover: hover] {
-  .btn-again:hover {
-    background: rgba(255, 227, 163, 0.1);
-    transform: scale(1.05);
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
+    const speed = force * (0.5 + Math.random() * 0.8);
+    const vx = Math.cos(angle) * speed;
+    const vy = Math.sin(angle) * speed;
+    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+    particles.push(new Particle(x, y, vx, vy, color));
   }
 }
 
-/* ================= АНИМАЦИИ ================= */
-[club66008961|@keyframes] fadeUp {
-  from { opacity: 0; transform: translateY(40px); }
-  to   { opacity: 1; transform: translateY(0); }
+function launchConfetti() {
+  const bursts = [
+    { x: W * 0.2, y: H * 0.35 },
+    { x: W * 0.8, y: H * 0.35 },
+    { x: W * 0.5, y: H * 0.25 },
+    { x: W * 0.35, y: H * 0.55 },
+    { x: W * 0.65, y: H * 0.55 },
+  ];
+  bursts.forEach((b, i) => {
+    setTimeout(() => burst(b.x, b.y, 70, 9), i * 180);
+  });setTimeout(() => burst(W / 2, H / 2.5, 150, 12), 900);
+  setTimeout(() => {
+    for (let i = 0; i < 8; i++) {
+      setTimeout(
+        () => burst(Math.random() * W, Math.random() * H * 0.5, 50, 8),
+        i * 100
+      );
+    }
+  }, 1400);
 }
 
-[club66008961|@keyframes] shine {
-  to { background-position: 300% center; }
-}
-
-[club66008961|@keyframes] beat {
-  0%, 100% { transform: scale(1); }
-  25%      { transform: scale(1.25); }
-}
-
-.heart {
-  display: inline-block;
-  color: #ff4d6d;
-  animation: beat 1.2s infinite;
-}
-
-.screen--greeting:not(.hidden) h1 {
-  animation: fadeUp 0.8s ease-out both, shine 5s linear infinite;
-}
-.screen--greeting:not(.hidden) h2 {
-  animation: fadeUp 0.8s ease-out 0.25s both;
-}
-.screen--greeting:not(.hidden) .message {
-  animation: fadeUp 0.8s ease-out 0.5s both;
-}
-.screen--greeting:not(.hidden) .btn-again {
-  animation: fadeUp 0.8s ease-out 0.75s both;
-}
-
-/* =====================================================
-   📱 МОБИЛЬНАЯ АДАПТАЦИЯ (медиа-запросы)
-   ===================================================== */
-
-/* Маленькие телефоны (высота ≤ 700px) — уменьшаем отступы */
-[id705766|max-height: 700px] {
-  .photo {
-    width: clamp(110px, 26vw, 180px);
-    height: clamp(110px, 26vw, 180px);
+function loop() {
+  ctx.clearRect(0, 0, W, H);
+  for (let i = particles.length - 1; i >= 0; i--) {
+    if (!particles[i].update()) {
+      particles.splice(i, 1);
+    } else {
+      particles[i].draw();
+    }
   }
-  .photo-wrap { margin-bottom: 16px; }
-  .question-text { margin-bottom: 24px; }
-  .btn-yes, .btn-no { padding: 14px 44px; font-size: 1.1rem; }
-  .screen--greeting h1 { font-size: clamp(1.6rem, 6vw, 3rem); }
-  .screen--greeting h2 { margin-bottom: 16px; }
-  .screen--greeting .message { margin-bottom: 24px; }
+  requestAnimationFrame(loop);
+}
+loop();
+
+/* =========================================================
+   4. ЭКРАНЫ И КНОПКИ
+   ========================================================= */
+const questionScreen = document.getElementById('questionScreen');
+const greetingScreen = document.getElementById('greetingScreen');
+const yesBtn = document.getElementById('yesBtn');
+const againBtn = document.getElementById('againBtn');
+const noBtn = document.getElementById('noBtn');
+
+function showGreeting() {
+  questionScreen.classList.add('hidden');
+  setTimeout(() => {
+    greetingScreen.classList.remove('hidden');
+  }, 300);
+  launchConfetti();
+}
+yesBtn.addEventListener('click', showGreeting);
+
+againBtn.addEventListener('click', launchConfetti);
+
+/* =========================================================
+   5. КНОПКА «НЕТ» — УБЕГАЕТ (с учётом тача)
+   ========================================================= */
+const NO_PADDING = 20;
+
+function moveNoButton() {
+  const btnRect = noBtn.getBoundingClientRect();
+  const w = btnRect.width;
+  const h = btnRect.height;
+
+  const maxX = window.innerWidth  - w - NO_PADDING;
+  const maxY = window.innerHeight - h - NO_PADDING;
+
+  const x = NO_PADDING + Math.random() * Math.max(0, maxX - NO_PADDING);
+  const y = NO_PADDING + Math.random() * Math.max(0, maxY - NO_PADDING);
+
+  noBtn.classList.add('runaway');
+  noBtn.style.left = x + 'px';
+  noBtn.style.top  = y + 'px';
 }
 
-/* Узкие экраны (ширина ≤ 420px) — кнопки столбиком */
-[id705766|max-width: 420px] {
-  .buttons {
-    flex-direction: column;
-    gap: 14px;
-  }
-  .btn-yes, .btn-no {
-    width: 100%;
-    max-width: 260px;
-    padding: 16px 20px;
-  }
-  .question-text { font-size: clamp(1.4rem, 7vw, 2rem); }
+// 📱 МОБИЛЬНАЯ ПРАВКА: если экран повернулся и кнопка оказалась за пределами — вернуть
+function clampNoButtonToScreen() {
+  const r = noBtn.getBoundingClientRect();
+  const maxX = window.innerWidth  - r.width  - NO_PADDING;
+  const maxY = window.innerHeight - r.height - NO_PADDING;
+
+  let x = Math.min(Math.max(r.left, NO_PADDING), maxX);
+  let y = Math.min(Math.max(r.top,  NO_PADDING), maxY);
+
+  noBtn.style.left = x + 'px';
+  noBtn.style.top  = y + 'px';
 }
 
-/* Уменьшенная анимация для слабых устройств — экономит батарею */
-[id705766|prefers-reduced-motion: reduce] {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+// Десктоп: мышь
+noBtn.addEventListener('mouseenter', moveNoButton);
 
-/* Ландшафтная ориентация на телефоне — прячем часть декора */
-[id705766|max-height: 500px] and (orientation: landscape) {
-  .photo { width: 90px; height: 90px; }
-  .photo-wrap { margin-bottom: 8px; }
-  .question-text {font-size: 1.2rem; margin-bottom: 14px; }
-}
+// 📱 Тач-устройства: реагируем на touchstart — раньше, чем click
+noBtn.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  moveNoButton();
+}, { passive: false });
+
+// Запасной вариант — click (на случай, если touch не сработал)
+noBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  moveNoButton();
+});
+
+/* =========================================================
+   6. КЛИК ПО ФОНУ — МИНИ-ВЗРЫВ
+   ========================================================= */
+// 📱 на телефоне кликаем через pointerdown — срабатывает быстрее
+document.body.addEventListener('pointerdown', (e) => {
+  const isButton = e.target.closest('button');
+  const greetingVisible = !greetingScreen.classList.contains('hidden');
+
+  if (!isButton && greetingVisible) {
+    burst(e.clientX, e.clientY, 40, 7);
+  }
+});
+
+/* =========================================================
+   7. 📱 ЗАЩИТА ОТ ЗУМА (pinch-zoom и double-tap)
+   ========================================================= */
+// Запрет pinch-zoom (два пальца) — иначе пользователь может «разъехать» сайт
+document.addEventListener('gesturestart', (e) => {
+  e.preventDefault();
+});
+
+// Запрет double-tap-zoom на iOS
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTouchEnd <= 300) {
+    e.preventDefault();
+  }
+  lastTouchEnd = now;
+}, { passive: false });
